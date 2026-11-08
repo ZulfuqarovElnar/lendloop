@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f7f4ee;
+  --card: #fffdf9;
+  --ink: #1f1d1a;
+  --muted: #6f6a61;
+  --line: #e4ded3;
+  --moss: #2f5d46;
+  --moss-ink: #ffffff;
+  --rust: #b4532a;
+  --sun: #e9b949;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #161512;
+    --card: #1f1d19;
+    --ink: #efebe3;
+    --muted: #a39d92;
+    --line: #34312b;
+    --moss: #8cc5a4;
+    --moss-ink: #10201a;
+    --rust: #e08a62;
+    --sun: #e9c46a;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-moss: var(--moss);
+  --color-moss-ink: var(--moss-ink);
+  --color-rust: var(--rust);
+  --color-sun: var(--sun);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+input, select, textarea {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  color: inherit;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--moss);
+  outline-offset: 2px;
+}
