@@ -44,3 +44,6 @@ next-env.d.ts
 
 # n8n secrets
 n8n/.env
+
+# written by next dev for coding agents
+AGENTS.md
