@@ -1,0 +1,186 @@
+{
+  "id": "LLloanEvents0001",
+  "name": "LendLoop – Loan event notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-loan-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "af188392-dadb-4ec4-8402-5cde9e77889f",
+      "name": "Loan event (from Convex)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "2aa4200d-82ba-4963-94c3-7fd32719db74"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Convex signs \"<timestamp>.<body>\" with N8N_WEBHOOK_SECRET (HMAC-SHA256). The body was produced\n// by JSON.stringify, so re-serialising the parsed body gives back the exact signed bytes.\nconst crypto = require('crypto');\nconst secret = $env.LENDLOOP_N8N_WEBHOOK_SECRET;\nconst { headers, body } = $input.first().json;\nconst ts = headers['x-lendloop-timestamp'] || '';\nconst sig = headers['x-lendloop-signature'] || '';\nconst fresh = /^\\d+$/.test(ts) && Math.abs(Date.now() / 1000 - Number(ts)) <= 300;\nconst expected = 'sha256=' + crypto.createHmac('sha256', secret || '').update(`${ts}.${JSON.stringify(body)}`).digest('hex');\nconst valid = Boolean(secret) && fresh && sig.length === expected.length &&\n  crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));\nreturn [{ json: { valid, payload: valid ? body : null } }];\n"
+      },
+      "id": "77afcc74-9733-4e6a-b844-ed91b274c63e",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "007beb33-8b0a-46ed-968e-8222d851501f",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "63153cb8-16ca-4bb0-be46-77eb359c687b",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Uses only what the message needs: first name, email, tool name, dates, status.\n// Duplicate deliveries (Convex retries after a timeout) are skipped by idempotency key.\n// To send real email, replace this node with a Send Email node using an SMTP credential.\nconst p = $input.first().json.payload;\nconst seen = $getWorkflowStaticData('global');\nseen.keys = seen.keys || {};\nif (seen.keys[p.idempotencyKey]) return [{ json: { ok: true, duplicate: true } }];\n\nconst when = `${p.startDate} – ${p.endDate}`;\nconst text = {\n  'loan.pending':   `Hi ${p.recipient.firstName}, a neighbour asked to borrow your ${p.tool} for ${when}. Open LendLoop to approve or decline.`,\n  'loan.cancelled': `Hi ${p.recipient.firstName}, the request for your ${p.tool} (${when}) was withdrawn.`,\n  'loan.approved':  `Hi ${p.recipient.firstName}, good news: your request for the ${p.tool} (${when}) was approved.`,\n  'loan.declined':  `Hi ${p.recipient.firstName}, your request for the ${p.tool} (${when}) was declined this time.`,\n  'loan.returned':  `Hi ${p.recipient.firstName}, thanks for returning the ${p.tool}.`,\n}[p.event];\nif (!text) throw new Error(`Unknown event ${p.event}`);\n\nconsole.log('[LendLoop mock email]', JSON.stringify({ to: p.recipient.email, subject: 'LendLoop update', text }));\n\n// Keep the last 500 keys so the store can't grow without bound.\nseen.keys[p.idempotencyKey] = Date.now();\nconst keys = Object.keys(seen.keys);\nif (keys.length > 500) for (const k of keys.sort((a, b) => seen.keys[a] - seen.keys[b]).slice(0, keys.length - 500)) delete seen.keys[k];\nreturn [{ json: { ok: true, duplicate: false } }];\n"
+      },
+      "id": "d188117a-cdfe-4e11-a848-1610bbecb39a",
+      "name": "Notify user (mock email)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, duplicate: $json.duplicate } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "bd8a3531-6fe2-4e45-82be-0606e163f990",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "3a0fb024-cbcc-4fab-bae9-75047870337a",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Loan event (from Convex)": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Notify user (mock email)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify user (mock email)": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "LLerrorHandler01",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

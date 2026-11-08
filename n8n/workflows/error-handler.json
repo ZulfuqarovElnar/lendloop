@@ -1,0 +1,106 @@
+{
+  "id": "LLerrorHandler01",
+  "name": "LendLoop – Error handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ccb46f58-c4f9-4ce9-ad09-4839a177a23a",
+      "name": "On workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Signs the request to Convex: HMAC-SHA256 over \"<ts>.POST <path>.<body>\" with LENDLOOP_INBOUND_SECRET.\nconst crypto = require('crypto');\nconst secret = $env.LENDLOOP_INBOUND_SECRET;\nif (!secret) throw new Error('LENDLOOP_INBOUND_SECRET is not set');\nconst path = '/n8n/errors';\nconst body = JSON.stringify({\n  executionId: String($json.execution?.id ?? `manual-${Date.now()}`),\n  workflow: $json.workflow?.name ?? 'unknown',\n  node: $json.execution?.lastNodeExecuted ?? undefined,\n  message: String($json.execution?.error?.message ?? 'unknown error').slice(0, 500),\n});\nconst ts = String(Math.floor(Date.now() / 1000));\nconst signature = 'sha256=' + crypto.createHmac('sha256', secret).update(`${ts}.POST ${path}.${body}`).digest('hex');\nreturn [{ json: { ts, signature, body } }];\n"
+      },
+      "id": "34b77240-96a0-42a9-98e9-fc0e855ba033",
+      "name": "Sign error report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LENDLOOP_CONVEX_SITE_URL }}/n8n/errors",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-lendloop-timestamp",
+              "value": "={{ $json.ts }}"
+            },
+            {
+              "name": "x-lendloop-signature",
+              "value": "={{ $json.signature }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "9f7f4b78-da8f-4270-9c05-4c2ff887e971",
+      "name": "Report to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "On workflow error": {
+      "main": [
+        [
+          {
+            "node": "Sign error report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign error report": {
+      "main": [
+        [
+          {
+            "node": "Report to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
